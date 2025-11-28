@@ -1,0 +1,65 @@
+{
+  "name": "unit-test-agent",
+  "displayName": "unit-test-agent",
+  "description": "Generates unit tests following PETS standard for SuperApp.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.106.1"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "unit-test-agent.helloWorld",
+        "title": "Hello World"
+      }
+    ],
+    "chatAgents": [
+        {
+            "id": "unit-test-agent.testGenerator",
+            "name": "SuperApp Test Generator",
+            "fullDescription": "An agent that generates unit tests according to the PETS standard (Prepare, Execute, Test, Share) and SuperApp coding best practices.",
+            "extensionId": "unit-test-agent",
+            "publisher": "YourPublisherName",
+            "isDefault": false,
+            "commands": [
+                {
+                    "name": "generate",
+                    "description": "Generates the unit test suite for the selected code.",
+                    "isDefault": true
+                },
+                {
+                    "name": "review",
+                    "description": "Reviews existing unit tests against the PETS standard."
+                }
+            ],
+            "aliases": [
+                "petstester",
+                "suptest"
+            ]
+        }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.106.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.46.3",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
