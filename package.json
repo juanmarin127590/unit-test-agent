@@ -7,41 +7,30 @@
     "vscode": "^1.106.1"
   },
   "categories": [
-    "Other"
+    "AI",
+    "Chat"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
+   "chatParticipants": [
       {
-        "command": "unit-test-agent.helloWorld",
-        "title": "Hello World"
+        "id": "unit-test-agent",
+        "name": "unit-test",
+        "fullName": "SuperApp Test Generator (PETS)",
+        "description": "Genera pruebas unitarias bajo el estándar PETS.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "generate",
+            "description": "Generates the unit test suite for the selected code."
+          },
+          {
+            "name": "review",
+            "description": "Reviews existing unit tests against the PETS standard."
+          }
+        ]
       }
-    ],
-    "chatAgents": [
-        {
-            "id": "unit-test-agent.testGenerator",
-            "name": "SuperApp Test Generator",
-            "fullDescription": "An agent that generates unit tests according to the PETS standard (Prepare, Execute, Test, Share) and SuperApp coding best practices.",
-            "extensionId": "unit-test-agent",
-            "publisher": "YourPublisherName",
-            "isDefault": false,
-            "commands": [
-                {
-                    "name": "generate",
-                    "description": "Generates the unit test suite for the selected code.",
-                    "isDefault": true
-                },
-                {
-                    "name": "review",
-                    "description": "Reviews existing unit tests against the PETS standard."
-                }
-            ],
-            "aliases": [
-                "petstester",
-                "suptest"
-            ]
-        }
     ]
   },
   "scripts": {
