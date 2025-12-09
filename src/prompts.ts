@@ -11,32 +11,40 @@ Generate unit tests applying the PETS standard 1065-relevant_superapp_frontend-f
 
 Instructions:
 
+// MANDATORY ARCHITECTURE CHECK: Repositories are tested through Middlewares, not directly.
+// If the target file is a RepositoryImpl (e.g., *RepositoryImpl.dart), ignore it and instead
+// generate the unit test for the associated Middleware, explaining the pedagogical reason in Spanish.
+
 Preparation (Prepare)
 - Structure the suite with group and test/testWidgets.
 - Name tests as 'should <result> when <scenario>'.
-- For repositories and services, use @GenerateNiceMocks from mockito, initialize mocks in setUp, and instantiate the real object under test.
+- For all non-widget test files, use @GenerateNiceMocks from mockito, initialize mocks in setUp, and instantiate the real object under test.
 - For connectors/widgets:
     - Call TestWidgetsFlutterBinding.ensureInitialized() in main.
     - Mock assets with a setUpAll that overwrites flutter/assets returning minimal bytes (SVG/PNG/manifest) when the widget requires them.
     - Wrap the widget in MaterialApp, StoreProvider, localizations, and other necessary decorators.
+    - **CRITICAL**: In setUp, mock the full Redux state hierarchy (Store -> AppState -> FeatureState -> SubState) to prevent null runtime exceptions.
 - Models: whenever a builder exists for the model (e.g., HadaCarneBuilder, UserLinkageItemEntityBuilder), use it to generate test instances. If no builder exists, create it under test/builders/ replicating the usual pattern (withX + build). Accompany any new builder with a test verifying it initializes all fields and respects default values.
 - Declare common constants outside of tests to improve readability.
 
 Execution (Execute)
-- Repositories: invoke public methods with named parameters, stubbing responses using when(...).thenAnswer/thenThrow.
+- Middlewares: Execute the middleware by calling \`middleware.run(mockStore, action, next)\`. Stub repository responses using \`when(mockRepo.method(...)).thenAnswer/thenThrow\`.
 - Widgets: await tester.pumpWidget(...) followed by await tester.pumpAndSettle();. Capture callbacks and side effects (navigation, dispatch, logs) via verify or variables.
 - View models/model builders: call fromStore, build, or other factories and save the result for assertions.
 
 Testing (Test)
 - Cover happy paths, error cases, and edge cases (null data, disabled flags, empty inputs).
-- For Either/Result, validate with expect(result.isRight(), isTrue) / expect(result.isLeft(), isTrue) and, when applicable, inspect the returned value.
-- Verify interactions with mocks (verify, verifyNever, verifyNoMoreInteractions).
+- For Either/Result, validate with \`expect(result.isRight(), isTrue)\` / \`expect(result.isLeft(), isTrue)\` and, when applicable, inspect the returned value.
+- **CRITICAL MIDDLEWARES**: Use \`verifyInOrder([])\` to ensure the exact sequence of dispatches and repository calls (e.g., SetLoading -> Repo Call -> SetSuccess/SetFailure).
+- **CRITICAL WIDGETS**: If the widget dispatches actions in \`onInit\`, use \`clearInteractions(mockStore)\` immediately after the first \`pump\` or \`pumpAndSettle\` to isolate test actions.
+- Always conclude middleware/repository-related tests with \`verifyNoMoreInteractions(mockRepository)\`.
 - In widgets, use find.text, find.byType, tester.widget, etc., to ensure UI renders and callbacks execute.
 - For models built with builders, check that each expected property is configured and associated callbacks work.
-- Document in brief comments what scenario each test covers (// Case: no configured products).
+- Document in brief comments what scenario each test covers (// Case: ...).
 
 Share
 - Maintain existing folder structure (test/data, test/presentation/..., test/builders/...).
+- Mocks must be centralized. Do NOT generate local \`*.mocks.dart\` files. Assume all mocks are defined in \`test/mocks/mocks.dart\`.
 - Use only allowed test dependencies (flutter_test, test, mockito, mocktail if already adopted in the module).
 - Ensure the suite compiles and runs with dart run test.
 - If you create new helpers/builders, document their purpose and how they should be used in future tests.
@@ -59,13 +67,18 @@ Review the provided Dart Test file code and check if it strictly follows the PET
 CRITERIA TO CHECK:
 1. Naming: Do tests start with "should ... when ..."?
 2. Mocks: Is @GenerateNiceMocks used? Are mocks initialized in setUp?
-3. Widgets: Is TestWidgetsFlutterBinding.ensureInitialized used? Are assets mocked in setUpAll?
-4. Builders: Are builders used for models?
-5. Structure: Is it organized in Prepare, Execute, Test steps (implicitly or explicitly)?
-6. Coverage: Are happy paths, errors, and edge cases covered?
+3. **Mocks Centralization**: Are there any local \`*.mocks.dart\` imports or definitions? (All mocks must reside in \`test/mocks/mocks.dart\`).
+4. **Repository Testing**: Is a Repository implementation being tested directly? (Repositories must be tested indirectly via Middlewares).
+5. Widgets Preparation: Is TestWidgetsFlutterBinding.ensureInitialized used? Are assets mocked in setUpAll?
+6. **Redux Hierarchy Mocking**: For widget/connector tests, is the full Redux state hierarchy (Store -> AppState -> FeatureState -> SubState) mocked in setUp?
+7. Builders: Are builders used for models?
+8. Structure: Is it organized in Prepare, Execute, Test steps (implicitly or explicitly)?
+9. Middlewares Verification: Does the middleware test use \`verifyInOrder\` for sequence checks (SetLoading -> Repo Call -> SetSuccess/SetFailure)?
+10. Widgets Cleanup: Is \`clearInteractions(mockStore)\` used after the initial \`pumpAndSettle\` when the widget dispatches actions on initialization?
+11. Coverage: Are happy paths, errors, and edge cases covered?
 
 OUTPUT FORMAT:
-- If the code is perfect: "✅ **Compliant**: The code follows the PETS standard."
+- If the code is perfect: "✅ **Compliant**: The code strictly follows the PETS standard and SuperApp architecture rules."
 - If issues are found: Provide a concise Markdown list of violations and suggestions to fix them using the PETS guidelines.
 - **Do not generate new code** unless asked to fix specific parts. Just review.
 - **LANGUAGE**: The review output and feedback MUST be in **SPANISH** with a formal, **ACADEMIC** tone.
