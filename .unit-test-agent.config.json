@@ -1,0 +1,27 @@
+{
+  "standards": {
+    "enabled": ["testing", "pets"],
+    "customFiles": [],
+    "includeSections": {
+      "testing": [
+        "Configuración General",
+        "Patrón AAA",
+        "Gestión de Mocks",
+        "Estándares por Tipo"
+      ],
+      "pets": [
+        "Arquitectura",
+        "Estructura del Módulo",
+        "Capas de Arquitectura"
+      ]
+    }
+  },
+  "modelPreference": {
+    "priority": ["sonnet", "gpt-5", "gpt-4o", "gemini", "gpt-4"]
+  },
+  "behavior": {
+    "autoLoadWorkspaceStandards": true,
+    "language": "es",
+    "verboseLogging": false
+  }
+}

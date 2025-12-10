@@ -1,7 +1,21 @@
 import * as vscode from 'vscode';
-import { PETS_REVIEW_PROMPT, PETS_SYSTEM_PROMPT } from './prompts';
+import { 
+    buildPetsSystemPrompt, 
+    buildPetsReviewPrompt,
+    buildUserTaskMessage,
+    buildReviewTaskMessage
+} from './prompts';
+import { StandardsManager, buildPetsTestingContext, buildReviewContext } from './standards';
+import { ConfigManager } from './config';
+
+// Instancias globales
+let standardsManager: StandardsManager;
+let configManager: ConfigManager;
 
 export function activate(context: vscode.ExtensionContext) {
+    // Inicializar gestores
+    standardsManager = new StandardsManager(context);
+    configManager = new ConfigManager();
 
     // 1. Helper para seleccionar el mejor modelo disponible de tu lista Premium
     async function pickModel(): Promise<vscode.LanguageModelChat | undefined> {
@@ -110,33 +124,90 @@ export function activate(context: vscode.ExtensionContext) {
         const fileName = document.fileName.split('/').pop() || 'unknown file';
 
         try {
-            // Paso A: Elegir Modelo
+            // Paso A: Cargar configuración y estándares (solo una vez al inicio)
+            if (standardsManager.listStandards().length === 0) {
+                stream.markdown('📚 Cargando configuración y estándares...\n\n');
+                
+                // Cargar configuración del usuario
+                await configManager.loadConfig();
+                const config = configManager.getConfig();
+                
+                if (configManager.isVerboseLogging()) {
+                    console.log('Agent configuration loaded:', config);
+                }
+                
+                // Cargar solo los estándares habilitados
+                const enabledStandards = configManager.getEnabledStandards();
+                for (const standardName of enabledStandards) {
+                    const fileName = `${standardName === 'pets' ? 'rlv_pets' : standardName}-standards.md`;
+                    try {
+                        await standardsManager.loadStandard(fileName, standardName);
+                    } catch (error) {
+                        console.warn(`Failed to load standard: ${standardName}`, error);
+                    }
+                }
+                
+                // Cargar estándares personalizados si están configurados
+                const customFiles = configManager.getCustomStandardFiles();
+                for (const { path, name } of customFiles) {
+                    try {
+                        await standardsManager.loadCustomStandard(path, name);
+                    } catch (error) {
+                        console.warn(`Failed to load custom standard: ${name} from ${path}`, error);
+                    }
+                }
+                
+                // Auto-cargar estándares del workspace si está habilitado
+                if (configManager.shouldAutoLoadWorkspaceStandards()) {
+                    await standardsManager.loadWorkspaceStandards();
+                }
+                
+                const loadedStandards = standardsManager.listStandards();
+                if (configManager.isVerboseLogging()) {
+                    console.log('Standards loaded:', loadedStandards);
+                }
+            }
+
+            // Paso B: Elegir Modelo
             const model = await pickModel();
             if (!model) {
                 stream.markdown('❌ No se encontró un modelo compatible (Copilot).');
                 return;
             }
 
-            // --- LÓGICA DE SELECCIÓN DE COMANDO (MODIFICADA)
-            let systemPrompt = PETS_SYSTEM_PROMPT;
-            let userTask = `The code to unit test is (File: ${fileName}):\n\n\`\`\`dart\n${codeContext}\n\`\`\``;
+            // Paso C: Construir contexto de estándares y prompts según el comando
+            let systemPrompt: string;
+            let userTask: string;
+            
+            // Obtener secciones configuradas para cada estándar
+            const includeSections: Record<string, string[]> = {};
+            for (const standardName of configManager.getEnabledStandards()) {
+                const sections = configManager.getIncludeSections(standardName);
+                if (sections) {
+                    includeSections[standardName] = sections;
+                }
+            }
 
             if (request.command === 'review') {
                 // Caso REVISAR
                 stream.markdown(`🧐 **Revisando** tests en **${fileName}** bajo estándar PETS (Modelo: **${model.name}**)...\n\n`);
-                systemPrompt = PETS_REVIEW_PROMPT;
-                userTask = `Please REVIEW the following existing test code against the PETS standard:\n\n\`\`\`dart\n${codeContext}\n\`\`\``;
+                const reviewContext = buildReviewContext(standardsManager, includeSections);
+                systemPrompt = buildPetsReviewPrompt(reviewContext);
+                userTask = buildReviewTaskMessage(codeContext);
             } else {
                 // Caso GENERAR (Default)
                 stream.markdown(`🤖 **Generando** tests para **${fileName}** (Modelo: **${model.name}**)...\n\n`);
+                const testingContext = buildPetsTestingContext(standardsManager, includeSections);
+                systemPrompt = buildPetsSystemPrompt(testingContext);
+                userTask = buildUserTaskMessage(fileName, codeContext);
             }
 
-            // Paso B: Obtener Contexto del Proyecto
+            // Paso D: Obtener Contexto del Proyecto (Builders, etc.)
             const workspaceInfo = await getProjectContext();
 
-            // Paso C: Construir Prompt
+            // Paso E: Construir Prompt
             const messages = [
-                // 1. Instrucción Maestra (PETS)
+                // 1. Instrucción Maestra (PETS) con estándares incluidos
                 vscode.LanguageModelChatMessage.User(systemPrompt),
                 
                 // 2. Información del Proyecto (Builders, etc.)
@@ -146,7 +217,7 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.LanguageModelChatMessage.User(userTask),
             ];
 
-            // Paso D: Enviar y procesar respuesta
+            // Paso F: Enviar y procesar respuesta
             const chatRequest = await model.sendRequest(messages, {}, token);
 
             for await (const fragment of chatRequest.text) {

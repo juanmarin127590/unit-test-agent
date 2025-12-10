@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Unit Test Agent Configuration",
+  "description": "Configuration for the Unit Test Agent standards and behavior",
+  "type": "object",
+  "properties": {
+    "standards": {
+      "description": "Standards configuration",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "description": "List of standard names to enable for test generation",
+          "items": {
+            "type": "string",
+            "enum": ["testing", "pets", "coding", "redux", "repository"]
+          },
+          "default": ["testing", "pets"]
+        },
+        "customFiles": {
+          "type": "array",
+          "description": "Custom standard files to load from workspace (relative paths)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Relative path to the markdown file"
+              },
+              "name": {
+                "type": "string",
+                "description": "Name identifier for the standard"
+              }
+            },
+            "required": ["path", "name"]
+          },
+          "default": []
+        },
+        "includeSections": {
+          "type": "object",
+          "description": "Specify which sections to include from each standard",
+          "properties": {
+            "testing": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": ["Configuración General", "Patrón AAA", "Gestión de Mocks"]
+            },
+            "pets": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": ["Arquitectura", "Estructura del Módulo"]
+            }
+          }
+        }
+      }
+    },
+    "modelPreference": {
+      "description": "Model selection preferences",
+      "type": "object",
+      "properties": {
+        "priority": {
+          "type": "array",
+          "description": "Ordered list of preferred models",
+          "items": {
+            "type": "string",
+            "enum": ["sonnet", "gpt-5", "gpt-4o", "gemini", "gpt-4"]
+          },
+          "default": ["sonnet", "gpt-5", "gpt-4o", "gemini", "gpt-4"]
+        }
+      }
+    },
+    "behavior": {
+      "description": "Agent behavior configuration",
+      "type": "object",
+      "properties": {
+        "autoLoadWorkspaceStandards": {
+          "type": "boolean",
+          "description": "Automatically search and load custom standards from workspace",
+          "default": true
+        },
+        "language": {
+          "type": "string",
+          "description": "Language for explanations and feedback",
+          "enum": ["es", "en"],
+          "default": "es"
+        },
+        "verboseLogging": {
+          "type": "boolean",
+          "description": "Enable verbose logging for debugging",
+          "default": false
+        }
+      }
+    }
+  }
+}
