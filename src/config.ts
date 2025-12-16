@@ -26,7 +26,7 @@ export interface AgentConfig {
  */
 const DEFAULT_CONFIG: AgentConfig = {
     standards: {
-        enabled: ['testing', 'pets', 'redux', 'coding', 'repository'],
+        enabled: ['testing'],
         customFiles: [],
         includeSections: {
             testing: ['Configuración General', 'Patrón AAA', 'Gestión de Mocks', 'Estándares por Tipo'],

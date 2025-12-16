@@ -169,16 +169,35 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // Paso B: Elegir Modelo
-            const model = await pickModel();
-            if (!model) {
-                stream.markdown('❌ No se encontró un modelo compatible (Copilot).');
-                return;
+
+            // Paso B: Elegir Modelo con fallback automático
+            // 1. Obtener todos los modelos disponibles y ordenarlos por prioridad
+            const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+            const priorityOrder = [
+                (m: any) => m.name?.toLowerCase().includes('sonnet') || m.family?.toLowerCase().includes('sonnet'),
+                (m: any) => m.name?.toLowerCase().includes('gpt-5') || m.id?.toLowerCase().includes('gpt-5'),
+                (m: any) => m.name?.toLowerCase().includes('gpt-4o') || m.family?.toLowerCase().includes('gpt-4o'),
+                (m: any) => m.family?.toLowerCase().includes('gemini') || m.name?.toLowerCase().includes('gemini'),
+                (m: any) => m.name?.toLowerCase().includes('gpt-4') || m.id?.toLowerCase().includes('gpt-4'),
+            ];
+            // Generar lista de modelos en orden de prioridad, sin duplicados
+            let modelsOrdered: any[] = [];
+            for (const filter of priorityOrder) {
+                const found = allModels.find(filter);
+                if (found && !modelsOrdered.includes(found)) {
+                    modelsOrdered.push(found);
+                }
+            }
+            // Agregar los que no entraron por prioridad
+            for (const m of allModels) {
+                if (!modelsOrdered.includes(m)) {
+                    modelsOrdered.push(m);
+                }
             }
 
             // Paso C: Construir contexto de estándares y prompts según el comando
-            let systemPrompt: string;
-            let userTask: string;
-            
+            let systemPrompt: string = '';
+            let userTask: string = '';
             // Obtener secciones configuradas para cada estándar
             const includeSections: Record<string, string[]> = {};
             for (const standardName of configManager.getEnabledStandards()) {
@@ -188,40 +207,58 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             }
 
-            if (request.command === 'review') {
-                // Caso REVISAR
-                stream.markdown(`🧐 **Revisando** tests en **${fileName}** bajo estándar PETS (Modelo: **${model.name}**)...\n\n`);
-                const reviewContext = buildReviewContext(standardsManager, includeSections);
-                systemPrompt = buildPetsReviewPrompt(reviewContext);
-                userTask = buildReviewTaskMessage(codeContext);
-            } else {
-                // Caso GENERAR (Default)
-                stream.markdown(`🤖 **Generando** tests para **${fileName}** (Modelo: **${model.name}**)...\n\n`);
-                const testingContext = buildPetsTestingContext(standardsManager, includeSections);
-                systemPrompt = buildPetsSystemPrompt(testingContext);
-                userTask = buildUserTaskMessage(fileName, codeContext);
-            }
-
             // Paso D: Obtener Contexto del Proyecto (Builders, etc.)
             const workspaceInfo = await getProjectContext();
 
             // Paso E: Construir Prompt
             const messages = [
-                // 1. Instrucción Maestra (PETS) con estándares incluidos
-                vscode.LanguageModelChatMessage.User(systemPrompt),
-                
-                // 2. Información del Proyecto (Builders, etc.)
+                vscode.LanguageModelChatMessage.User(systemPrompt ?? ''),
                 vscode.LanguageModelChatMessage.User(workspaceInfo),
-                
-                // 3. Código del Usuario
-                vscode.LanguageModelChatMessage.User(userTask),
+                vscode.LanguageModelChatMessage.User(userTask ?? ''),
             ];
 
-            // Paso F: Enviar y procesar respuesta
-            const chatRequest = await model.sendRequest(messages, {}, token);
+            // Paso F: Intentar con cada modelo hasta que funcione
+            let lastError: any = null;
+            for (const model of modelsOrdered) {
+                try {
+                    // Actualizar prompts según modelo y comando
+                    if (request.command === 'review') {
+                        stream.markdown(`🧐 **Revisando** tests en **${fileName}** bajo estándar PETS (Modelo: **${model.name}**)...\n\n`);
+                        const reviewContext = buildReviewContext(standardsManager, includeSections);
+                        systemPrompt = buildPetsReviewPrompt(reviewContext);
+                        userTask = buildReviewTaskMessage(codeContext);
+                    } else {
+                        stream.markdown(`🤖 **Generando** tests para **${fileName}** (Modelo: **${model.name}**)...\n\n`);
+                        const testingContext = buildPetsTestingContext(standardsManager, includeSections);
+                        systemPrompt = buildPetsSystemPrompt(testingContext);
+                        userTask = buildUserTaskMessage(fileName, codeContext);
+                    }
+                    // Actualizar mensajes
+                    messages[0] = vscode.LanguageModelChatMessage.User(systemPrompt);
+                    messages[2] = vscode.LanguageModelChatMessage.User(userTask);
 
-            for await (const fragment of chatRequest.text) {
-                stream.markdown(fragment);
+                    const chatRequest = await model.sendRequest(messages, {}, token);
+                    for await (const fragment of chatRequest.text) {
+                        stream.markdown(fragment);
+                    }
+                    // Si funcionó, salimos del ciclo
+                    return;
+                } catch (err: any) {
+                    lastError = err;
+                    // Si es ChatQuotaExceeded, probar siguiente modelo
+                    if (err?.name === 'ChatQuotaExceeded' || err?.message?.includes('ChatQuotaExceeded')) {
+                        stream.markdown(`⚠️ Cuota agotada para el modelo **${model.name}**. Probando siguiente modelo disponible...\n`);
+                        continue;
+                    } else {
+                        // Otro error, no seguir intentando
+                        throw err;
+                    }
+                }
+            }
+            // Si ninguno funcionó
+            stream.markdown('❌ No se encontró un modelo Copilot disponible o todos agotaron su cuota.');
+            if (lastError) {
+                console.error('Último error de modelo:', lastError);
             }
 
         } catch (err) {
@@ -236,7 +273,6 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             if (err instanceof vscode.CancellationError) {
-                // Este bloque ahora es redundante debido a la comprobación anterior, pero lo mantenemos por si acaso.
                 // En la práctica, token.isCancellationRequested será true aquí.
                 stream.markdown('\n\n*Solicitud cancelada.*');
             } else {
